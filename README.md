@@ -33,13 +33,34 @@ The glasses receive a new JSON packet every time your heading changes by the con
 {"type":"status",  "text":"Rokid Compass connected — heading data streaming on TCP :8100"}
 ```
 
+## SDK Setup
+
+The glasses now connect over **Bluetooth via the Rokid AI glasses SDK** — no Wi-Fi port or TCP server needed.
+
+The only thing left for each app is filling in the three credential constants (`kAppKey`, `kAppSecret`, `kAccessKey`) from [account.rokid.com/#/setting/prove](https://account.rokid.com/#/setting/prove), then running `pod install`.
+
+1. **Get credentials** at <https://account.rokid.com/#/setting/prove> and paste them into the glasses Swift file:
+   ```swift
+   private let kAppKey    = "YOUR_APP_KEY"
+   private let kAppSecret = "YOUR_APP_SECRET"
+   private let kAccessKey = "YOUR_ACCESS_KEY"
+   ```
+
+2. **Install CocoaPods dependencies** from the repo root:
+   ```bash
+   pod install
+   open *.xcworkspace   # always open the .xcworkspace, not .xcodeproj
+   ```
+
+3. *(Glasses now connect automatically over Bluetooth — no TCP port needed.)*
+
 ## Setup
 
 1. Open `RokidCompass.xcodeproj` in Xcode 15+
 2. Set your team in Signing & Capabilities
 3. Build and run on iPhone (iOS 17+)
 4. Grant **location** permission when prompted (needed for true-north heading)
-5. Connect Rokid glasses to the same Wi-Fi; point TCP client at `<phone-ip>:8100`
+5. *(Glasses now connect automatically over Bluetooth — no TCP port needed.)*
 6. The heading starts streaming immediately — appears on glasses in real time
 
 ## Settings
