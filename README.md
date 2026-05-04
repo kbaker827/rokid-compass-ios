@@ -24,13 +24,13 @@ Three display formats to choose from:
 
 The glasses receive a new JSON packet every time your heading changes by the configured threshold (default: 1°).
 
-## TCP wire protocol (Bluetooth/RokidSDK)
+## Wire protocol (Bluetooth/RokidSDK)
 
 ```json
 {"type":"compass", "text":"↑ N  007°"}
 {"type":"compass", "text":"↗ NE  047°"}
 {"type":"compass", "text":"→ E  091°"}
-{"type":"status",  "text":"Rokid Compass connected — heading data streaming on TCP :8100"}
+{"type":"status",  "text":"Rokid Compass connected — heading data streaming via Bluetooth/RokidSDK"}
 ```
 
 ## SDK Setup
@@ -56,7 +56,7 @@ The only thing left for each app is filling in the three credential constants (`
 
 ## Setup
 
-1. Open `RokidCompass.xcodeproj` in Xcode 15+
+1. Open `RokidCompass.xcworkspace` in Xcode 15+ (after running `pod install`) 15+
 2. Set your team in Signing & Capabilities
 3. Build and run on iPhone (iOS 17+)
 4. Grant **location** permission when prompted (needed for true-north heading)
@@ -87,4 +87,4 @@ Uses `CLLocationManager.startUpdatingHeading()` with **true north** (requires lo
 - Xcode 15+
 - iPhone with magnetometer (all modern iPhones)
 - Location permission (for true-north correction)
-- Rokid AR glasses on the same Wi-Fi
+- Rokid AI glasses (paired via Bluetooth — no Wi-Fi needed)
