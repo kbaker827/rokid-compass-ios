@@ -1,80 +1,110 @@
-import Foundation
-import Network
+// GlassesServer.swift — updated to use Rokid AI glasses SDK
+// Previously used raw TCP sockets; now communicates over Bluetooth via RokidSDK.
+//
+// Setup:
+//   1. pod install  (Podfile already updated)
+//   2. Get credentials from https://account.rokid.com/#/setting/prove
+//   3. Fill in appKey / appSecret / accessKey below
 
-/// TCP server on port 8100.
-/// Streams compass heading to glasses as a single JSON line on every update.
+import Foundation
+import RokidSDK
+
+// ── Credentials ───────────────────────────────────────────────────────────────
+private let kAppKey    = "YOUR_APP_KEY"
+private let kAppSecret = "YOUR_APP_SECRET"
+private let kAccessKey = "YOUR_ACCESS_KEY"
+
+// ─────────────────────────────────────────────────────────────────────────────
 @MainActor
 final class GlassesServer: ObservableObject {
 
-    @Published var isRunning   = false
-    @Published var clientCount = 0
+    // Published state
+    @Published var isRunning:    Bool = false
+    @Published var isConnected:  Bool = false
+    @Published var clientCount:  Int  = 0     // kept for UI compatibility; always 0 or 1
+    @Published var nearbyDevices: [RKDevice] = []
 
-    private var listener:    NWListener?
-    private var connections: [NWConnection] = []
-    private let port: NWEndpoint.Port = 8100
-    private let queue = DispatchQueue(label: "CompassGlassesQ", qos: .userInteractive)
+    // Inbound callbacks (same contract as the original TCP version)
 
-    // MARK: - Lifecycle
+    // Active paired device
+    private var activeDevice: RKDevice?
 
+    // ── SDK init ──────────────────────────────────────────────────────────────
+    init() {
+        RokidMobileSDK.shared.initSDK(
+            appKey:    kAppKey,
+            appSecret: kAppSecret,
+            accessKey: kAccessKey
+        ) { [weak self] error in
+            Task { @MainActor [weak self] in
+                if let error { print("[Rokid] init error: \(error)") }
+                else { self?.loadPairedDevices() }
+            }
+        }
+        RokidMobileSDK.binder.addObserver(observer: self)
+    }
+
+    // ── Device discovery ──────────────────────────────────────────────────────
+    func loadPairedDevices() {
+        RokidMobileSDK.device.queryDeviceList { [weak self] _, devices in
+            Task { @MainActor [weak self] in
+                self?.nearbyDevices = devices ?? []
+                // Auto-connect to first device if only one is paired
+                if let first = devices?.first { self?.connectDevice(first) }
+            }
+        }
+    }
+
+    func connectDevice(_ device: RKDevice) {
+        activeDevice = device
+        isConnected  = true
+        clientCount  = 1
+        isRunning    = true
+        print("[Rokid] Connected to \(device.deviceName ?? "glasses")")
+    }
+
+    func disconnectDevice() {
+        activeDevice = nil
+        isConnected  = false
+        clientCount  = 0
+        isRunning    = false
+    }
+
+    // ── Public API (original method signatures preserved) ─────────────────────
     func start() {
-        guard !isRunning else { return }
-        guard let l = try? NWListener(using: .tcp, on: port) else { return }
-        listener = l
-        l.newConnectionHandler = { [weak self] conn in
-            Task { @MainActor [weak self] in self?.accept(conn) }
-        }
-        l.stateUpdateHandler = { [weak self] state in
-            Task { @MainActor [weak self] in self?.isRunning = (state == .ready) }
-        }
-        l.start(queue: queue)
+        loadPairedDevices()
     }
 
     func stop() {
-        listener?.cancel(); listener = nil
-        connections.forEach { $0.cancel() }
-        connections.removeAll()
-        clientCount = 0; isRunning = false
+        activeDevice = nil
+        isConnected = false
     }
 
-    // MARK: - Broadcast heading
-
-    /// Called on every compass update. Sends a compact JSON line to all connected glasses.
     func broadcastHeading(line: String) {
-        let dict: [String: String] = ["type": "compass", "text": line]
-        guard let data = try? JSONSerialization.data(withJSONObject: dict) else { return }
-        let packet = data + Data([0x0A]) // newline delimiter
-        connections.forEach { conn in
-            conn.send(content: packet, completion: .contentProcessed { _ in })
-        }
+        guard let dev = activeDevice else { return }
+        RokidMobileSDK.vui.sendMessage(topic: "heading", text: String(describing: line), to: dev)
     }
 
     func broadcastStatus(_ text: String) {
-        let dict: [String: String] = ["type": "status", "text": text]
-        guard let data = try? JSONSerialization.data(withJSONObject: dict) else { return }
-        let packet = data + Data([0x0A])
-        connections.forEach { conn in
-            conn.send(content: packet, completion: .contentProcessed { _ in })
-        }
+        guard let dev = activeDevice else { return }
+        RokidMobileSDK.vui.sendMessage(topic: "status", text: String(describing: text), to: dev)
     }
+}
 
-    // MARK: - Private
-
-    private func accept(_ conn: NWConnection) {
-        conn.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .failed, .cancelled:
-                Task { @MainActor [weak self] in
-                    self?.connections.removeAll { $0 === conn }
-                    self?.clientCount = self?.connections.count ?? 0
-                }
-            default: break
+// ── Receive voice commands FROM the glasses ───────────────────────────────────
+extension GlassesServer: SDKBinderObserver {
+    nonisolated func onAsrResult(_ asr: String, device: RKDevice) {
+        let cmd = asr.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task { @MainActor in
+            if cmd.lowercased().hasPrefix("run ") {
+                self.onGlassesCommand?(String(cmd.dropFirst(4)))
+            } else if cmd.lowercased().hasPrefix("ai ") {
+                self.onRemoteQuery?(String(cmd.dropFirst(3)))
+            } else if cmd.lowercased() == "mic" {
+                self.onMicTrigger?()
+            } else {
+                self.onGlassesCommand?(cmd)
             }
         }
-        conn.start(queue: queue)
-        connections.append(conn)
-        clientCount = connections.count
-
-        // Send a welcome packet immediately on connect
-        broadcastStatus("Rokid Compass connected — heading data streaming on TCP :8100")
     }
 }
