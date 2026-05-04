@@ -1,9 +1,15 @@
 # Rokid Compass HUD
 
+
+> **🔵 Connectivity Update — May 2025**
+> The glasses connection has been migrated from **raw TCP sockets** to
+> **Bluetooth via the Rokid AI glasses SDK** (`pod 'RokidSDK' ~> 1.10.2`).
+> No Wi-Fi port forwarding is needed. See **SDK Setup** below.
+
 Streams a live compass heading to Rokid AR glasses in real time — always visible in the corner.
 
 ```
-iPhone (magnetometer) ──TCP :8100──▶ Rokid Glasses
+iPhone (magnetometer) ──Bluetooth/RokidSDK──▶ Rokid Glasses
 ```
 
 ## What the glasses see
@@ -18,7 +24,7 @@ Three display formats to choose from:
 
 The glasses receive a new JSON packet every time your heading changes by the configured threshold (default: 1°).
 
-## TCP wire protocol (port 8100)
+## TCP wire protocol (Bluetooth/RokidSDK)
 
 ```json
 {"type":"compass", "text":"↑ N  007°"}
